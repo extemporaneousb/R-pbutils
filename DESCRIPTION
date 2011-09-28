@@ -1,0 +1,10 @@
+Package: pbutils
+Type: Package
+Title: Utility functions for random tasks. 
+Version: 1.0
+Date: 2010-02-20
+Author: James Bullard
+Maintainer: <jbullard@pacificbiosciences.com>
+Imports: Biostrings, IRanges
+Description: Utility functions for random tasks.
+License: Artistic Liscence
