@@ -5,6 +5,6 @@ Version: 1.0
 Date: 2010-02-20
 Author: James Bullard
 Maintainer: <jbullard@pacificbiosciences.com>
-Imports: Biostrings, IRanges
+Depends: Biostrings, IRanges
 Description: Utility functions for random tasks.
 License: Artistic Liscence
