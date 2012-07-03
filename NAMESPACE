@@ -1,3 +1,5 @@
+useDynLib(pbutils)
+
 ##
 ## export anything w/out a . in front
 ##

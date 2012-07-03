@@ -241,7 +241,7 @@ qqPlot <- function(x, y, twoSided = TRUE, maxPoints = 5000, qtiles = c(.95, .99,
   if (legend) legend("topleft", qbins, fill = bincols)
 }
 
-qqPairs <- function(x, twoSided = FALSE, ...) {
+qqPairs <- function(x, twoSided = FALSE, text = NA, ...) {
   if (class(x) == "list") {
     m <- min(sapply(x, length))
     m <- if (m > 1e4) 1e4 else m
@@ -257,6 +257,11 @@ qqPairs <- function(x, twoSided = FALSE, ...) {
   } else {
     qqPlot(x[,1], x[,2], xlim = u, ylim = u, twoSided = twoSided,
            xlab = colnames(x)[1], ylab = colnames(x)[2], ...)
+  }
+  if (! any(is.na(text))) {
+    par(new = TRUE)
+    plot(NA, NA, xlim = c(0,1), ylim = c(0,1), axes = FALSE, xlab = NA, ylab = NA)
+    text(.25, .25, text, cex = 2)
   }
 }
 
@@ -393,7 +398,7 @@ readAlignmentSummaryGFF <- function(gffFile, keepAttributes = TRUE) {
 }
 
 namedRange <- function(range, names) {
-  names(range) <- names
+  names(range) <- if (missing(names)) range else names
   return(range)
 }
 
