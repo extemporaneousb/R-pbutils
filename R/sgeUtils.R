@@ -57,7 +57,7 @@
 }
 
 sgeApply <- function(X, FUN, ..., basedir = ".sge_R", pe = "-pe smp 1", queue = "secondary",
-                     debug = FALSE, distribute = TRUE) {
+                     debug = FALSE, distribute = TRUE, Rcmd = "R") {
 
   if (! distribute) {
     return(lapply(X, FUN, ...))
@@ -87,12 +87,11 @@ sgeApply <- function(X, FUN, ..., basedir = ".sge_R", pe = "-pe smp 1", queue = 
               exprString, uid, uid)
     scriptTxt <- paste(frontMatter, scriptTxt)
     cat(scriptTxt, file = script)
-    submitCmd <- sprintf("qsub -N %s -V -cwd -q %s  %s -b y R CMD BATCH --vanilla --no-save %s", uid, queue,
-                         pe, script)
+    submitCmd <- sprintf("qsub -N %s -V -cwd -q %s  %s -b y %s CMD BATCH --vanilla --no-save %s", uid, queue,
+                         pe, Rcmd, script)
 
     print(submitCmd)
     system(submitCmd)
-    
     setwd(odir)
     return(uid)
   }
@@ -132,13 +131,14 @@ sgeApply <- function(X, FUN, ..., basedir = ".sge_R", pe = "-pe smp 1", queue = 
 
   sgeLapply <- function(X, FUN, ...) {
     if (! is.atomic(X)) {
-      stop("This procedure works with atomic values of X, i.e., numbers, strings, etc.")
+      stop("This procedure works only with atomic values of X, i.e., numbers, strings, etc.")
     }
     res <- lapply(X, function(elt) {
       force(elt)
       f <- match.fun(FUN)
       fdef <- sprintf("fff = %s", paste(deparse(f), collapse = "\n"))
-      fcall <- sprintf("fff(%s)", paste(deparse(elt), collapse = "\n"))
+      fcall <- sprintf("tryCatch(fff(%s), simpleError = function(se) { print(se) ; return(se) })",
+                       paste(deparse(elt), collapse = "\n"))
       paste(fdef, fcall, sep = "\n")
     })
     res <- sgeEvalExprStrings(lapply(res, paste, collapse = "\n"))
@@ -151,6 +151,10 @@ sgeApply <- function(X, FUN, ..., basedir = ".sge_R", pe = "-pe smp 1", queue = 
     system("sleep 10")
     res <- sgeWait(uids)
     if (! debug) sapply(uids, sgeCleanup)
+    errors <- Filter(function(z) inherits(z, "simpleError"), res)
+    if (length(errors) > 0) {
+      stop(paste(errors, collapse = '\n'))
+    }
     return(res)
   }
   frontMatter <- sgePrepare()

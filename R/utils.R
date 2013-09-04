@@ -89,12 +89,12 @@ makeMap <- function(dta, xname, ynames) {
 }
 
 readM4 <- function(fname, parseReadNames = FALSE, ...) {
-  cols <- c("queryId", "targetId", "smithWatermanEditScore", "hmmProbScore", "smithWatermanQVScore",
-            "pctIdentity", "queryStrand", "queryStart", "queryEnd", "queryLength", "targetStrand",
-            "targetStart", "targetEnd", "targetLength")
+  cols <- c("qname", "tname", "score", "pctsimilarity", "qstrand", "qstart",
+            "qend", "qseqlength", "tstrand", "tstart", "tend", "tseqlength",
+            "mapqv", "ncells", "clusterScore", "probscore", "numSigClusters" )
   tbl <- read.table(fname, stringsAsFactors = TRUE, ...)
   colnames(tbl) <- cols
-
+  
   if (parseReadNames)
     tbl <- cbind(tbl, parseReadNames(tbl$queryId))
   
@@ -121,8 +121,8 @@ parseReadNames <- function(rn) {
     r[2] <- gsub("y", "", r[2])
     r
   })))
-  colnames(d) <- c("x", "y", "runid", "moviename", "timestamp", "machine", "pane",
-                   "block_fragment_positioninoriginal")
+  colnames(d) <- c("x", "y", "runid", "moviename", "timestamp", "machine",
+                   "pane", "block_fragment_positioninoriginal")
   d$block <- sapply(strsplit(as.character(d[,8]), "\\."), "[", 1)
   d$fragment <- sapply(strsplit(as.character(d[,8]), "\\."), "[", 2)
   d <- d[,-8]
@@ -160,14 +160,37 @@ cleanFASTA <- function(ifile, ofile = NULL, removeSpaces = NULL) {
   return(xstring)
 }
 
-plotDensity <- function(x, col = 1:length(x), legend = FALSE, xlim = NULL, ylim = NULL, log = NULL,
+plotEcdf <- function(lst, col = 1:length(lst), xlim = NA, ylim = NA,
+                     legend = TRUE, ylab = 'Fn(x)', ...) {
+  ecdfs <- lapply(lst, ecdf)
+
+  xrng <- if (any(is.na(xlim))) range(sapply(lst, range, na.rm = TRUE)) else xlim
+  yrng <- if (any(is.na(ylim))) c(0, 1) else ylim
+  
+  plot(NA, xlim = xrng, ylim = yrng, ylab = ylab, ...)
+  mapply(ecdfs, col, FUN = function(a, cl) {
+    kal <- quote(plot(a, col = cl, add = TRUE))
+    for (nm in names(list(...))){
+      if (nm != 'log') kal[[nm]] <- list(...)[[nm]]
+    }
+    eval(kal)
+  })
+  if (legend) {
+    legend("bottomright", names(lst), fill = col, bg = 'white')
+  }
+ 
+  invisible(ecdfs) 
+}
+
+plotDensity <- function(x, col = 1:length(x), legend = FALSE, xlim = NULL,
+                        ylim = NULL, log = NULL,
                         lwd = rep(1, length(x)),
                         lty = rep(1, length(x)), ...) {
   LOG <- FALSE
   
   if (! is.null(log)) {
     if (log == 'y')
-      stop("Y access log not yet implemented.")
+      stop("Y-axis log not yet implemented.")
     else {
       LOG <- TRUE
       x   <- lapply(x, log10)
@@ -184,7 +207,8 @@ plotDensity <- function(x, col = 1:length(x), legend = FALSE, xlim = NULL, ylim 
   if (is.null(xlim)) xlim <- c(min(r[1,]), max(r[2,]))
   if (is.null(ylim)) ylim <- c(min(r[3,]), max(r[4,]))
 
-  plot(NA, xlim = xlim, ylim = ylim, ylab = "density", xaxt = if (LOG) 'n' else 's', ...)
+  plot(NA, xlim = xlim, ylim = ylim, ylab = "density",
+       xaxt = if (LOG) 'n' else 's', ...)
   
   mapply(function(d, col, lty, lwd) {
     points(d$x, d$y, type = 'l', col = col, lty = lty, lwd = lwd, ...)
@@ -194,7 +218,8 @@ plotDensity <- function(x, col = 1:length(x), legend = FALSE, xlim = NULL, ylim 
     ## Steal a page out of ggplot.
     u <- par('usr')[1:2]
     p <- pretty(r, 8)
-    e <- parse(text = sprintf("expression(%s)", paste(paste("10^", p, sep = ""), collapse = ",")))
+    e <- parse(text = sprintf("expression(%s)", paste(paste("10^", p, sep = ""),
+        collapse = ",")))
     axis(1, p, labels = eval(e))
   }
   
@@ -206,8 +231,10 @@ plotDensity <- function(x, col = 1:length(x), legend = FALSE, xlim = NULL, ylim 
 ## Produce a subsampled qqPlot with colorized points based on
 ## quantiles
 ##
-qqPlot <- function(x, y, twoSided = TRUE, maxPoints = 5000, qtiles = c(.95, .99, .999),
-                   pch = 16, colors = c("red", "violet", "orange"), legend = T, ...) {
+qqPlot <- function(x, y, twoSided = TRUE, maxPoints = 5000,
+                   qtiles = c(.95, .99, .999),
+                   pch = 16, colors = c("red", "violet", "orange"),
+                   legend = T, ...) {
   stopifnot(length(qtiles) == length(colors))
 
   m <- min(length(x), length(y))
@@ -223,11 +250,13 @@ qqPlot <- function(x, y, twoSided = TRUE, maxPoints = 5000, qtiles = c(.95, .99,
   if (twoSided) {
     qtiles <- c(rev((1 - qtiles)/2), (1 + qtiles)/2)
     colors <- c(rev(colors), "black", colors)
-    qbins <- paste(paste(c(0, qtiles)*100, c(qtiles, 1)*100, sep = '-'), "%", sep = "")
+    qbins <- paste(paste(c(0, qtiles)*100, c(qtiles, 1)*100, sep = '-'),
+                   "%", sep = "")
     bincols <- colors
   } else {
     colors <- c("black", colors)
-    qbins <- paste(paste(c(0, qtiles*100), c(qtiles, 1)*100, sep = "-"), "%", sep = "")
+    qbins <- paste(paste(c(0, qtiles*100), c(qtiles, 1)*100, sep = "-"),
+                   "%", sep = "")
     bincols <- colors
   }
   colors <- colors[findInterval(seq(0, 1, length = m), qtiles) + 1]
@@ -291,13 +320,16 @@ interleave <- function(..., list = NULL) {
       do.call(cbind, lapply(a, function(b) b[,i]))
     }))
   }
-  x <- switch(class(a[[1]]), "matrix" = doMatrix(), "data.frame" = doMatrix(), "list" = doList())
+  x <- switch(class(a[[1]]), "matrix" = doMatrix(),
+              "data.frame" = doMatrix(), "list" = doList())
 
   return(x)
 }
 
-plotDwellTimePDF <- function(x, col = 1:length(x), xlim = NULL, ylim = NULL, main = NULL,
-                            xlab = NULL, ylab = NULL, lwd = 2, transform = function(a, b) (a * 10^b), ...) {
+plotDwellTimePDF <- function(x, col = 1:length(x), xlim = NULL, ylim = NULL,
+                             main = NULL,
+                            xlab = NULL, ylab = NULL, lwd = 2,
+                             transform = function(a, b) (a * 10^b), ...) {
 
   ds <- lapply(x, function(b) {
     d <- density(log10(b), na.rm = TRUE)
@@ -322,7 +354,8 @@ plotDwellTimePDF <- function(x, col = 1:length(x), xlim = NULL, ylim = NULL, mai
   
   ## xaxis.
   p <- pretty(do.call(c, lapply(ds, function(a) a$x)), 8)
-  e <- parse(text = sprintf("expression(%s)", paste(paste("10^", p, sep = ""), collapse = ",")))
+  e <- parse(text = sprintf("expression(%s)", paste(paste("10^", p, sep = ""),
+      collapse = ",")))
   axis(1, p, labels = eval(e))
   
   ## yaxis
@@ -331,15 +364,16 @@ plotDwellTimePDF <- function(x, col = 1:length(x), xlim = NULL, ylim = NULL, mai
 
 }
 
-readGFF <- function(gffFile, attrClasses = c(), keepAttributes = FALSE, sep = "\t",
-                  fill = TRUE, flush = TRUE) {
+readGFF <- function(gffFile, attrClasses = c(), keepAttributes = FALSE,
+                    sep = "\t", fill = TRUE, flush = TRUE) {
   ##
   ## Based on the description here:
   ## http://www.sanger.ac.uk/resources/software/gff/spec.html
   ## 
-  d <- read.table(gffFile, comment.char = '#', stringsAsFactors = FALSE, sep = sep,
-                  fill = fill, flush = flush)
-  colnames(d) <- c('seqid','source','type','start','end','score','strand','frame','attributes')
+  d <- read.table(gffFile, comment.char = '#', stringsAsFactors = FALSE,
+                  sep = sep, fill = fill, flush = flush)
+  colnames(d) <- c('seqid','source','type','start','end','score','strand',
+                   'frame','attributes')
 
   attrs <- strsplit(d$attributes, split = ";")
   keyValues <- lapply(attrs, function(a) strsplit(a, split = "="))
@@ -348,7 +382,10 @@ readGFF <- function(gffFile, attrClasses = c(), keepAttributes = FALSE, sep = "\
     l <- vector("list", length(attrNames))
     l[1:length(l)] <- NA
     names(l) <- attrNames
-    l[match(sapply(kv, "[[", 1), names(l))] <- sapply(kv, "[[", 2)
+    l[match(sapply(kv, "[[", 1), names(l))] <- sapply(kv, function(z) {
+      if (length(z) >= 2) z[2] else ''
+    })
+
     return(l)
   })
   w <- if(keepAttributes) {
@@ -356,7 +393,8 @@ readGFF <- function(gffFile, attrClasses = c(), keepAttributes = FALSE, sep = "\
   } else {
     -which(colnames(d) == "attributes")
   }
-  nd <- cbind(d[,w], do.call(rbind, lapply(flat, unlist)), stringsAsFactors = FALSE)
+  nd <- cbind(d[,w], do.call(rbind, lapply(flat, unlist)),
+              stringsAsFactors = FALSE)
 
   for (i in seq.int(attrClasses)) {
     class(nd[,names(attrClasses)[i]]) <- attrClasses[i]
@@ -365,7 +403,8 @@ readGFF <- function(gffFile, attrClasses = c(), keepAttributes = FALSE, sep = "\
 }
 
 readVariantsGFF <- function(gffFile, keepAttributes = TRUE) {
-  a <- readGFF(gffFile, attrClasses = c("coverage" = "integer", "confidence" = "numeric",
+  a <- readGFF(gffFile, attrClasses = c("coverage" = "integer",
+                          "confidence" = "numeric",
                           "length" = "integer"), keepAttributes = keepAttributes)
   a <- a[, !(colnames(a) %in% c("source", "frame"))]
   a$x <- (a$start + a$end)/2
@@ -375,7 +414,8 @@ readVariantsGFF <- function(gffFile, keepAttributes = TRUE) {
 }
 
 readAlignmentSummaryGFF <- function(gffFile, keepAttributes = TRUE) {
-  a <- readGFF(gffFile, attrClasses = c("ins" = "integer", "del" = "numeric", "snv" = "integer"),
+  a <- readGFF(gffFile, attrClasses = c("ins" = "integer", "del" = "numeric",
+                          "snv" = "integer"),
                keepAttributes = keepAttributes)
   a <- a[, !(colnames(a) %in% c("source", "frame"))]
 
