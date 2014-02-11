@@ -185,7 +185,7 @@ plotEcdf <- function(lst, col = 1:length(lst), xlim = NA, ylim = NA,
 plotDensity <- function(x, col = 1:length(x), legend = FALSE, xlim = NULL,
                         ylim = NULL, log = NULL,
                         lwd = rep(1, length(x)),
-                        lty = rep(1, length(x)), ...) {
+                        lty = rep(1, length(x)), densityFx = density, ...) {
   LOG <- FALSE
   
   if (! is.null(log)) {
@@ -201,7 +201,7 @@ plotDensity <- function(x, col = 1:length(x), legend = FALSE, xlim = NULL,
     x <- as.data.frame(x)
   }
   
-  a <- lapply(x, density, na.rm = TRUE)
+  a <- lapply(x, densityFx, na.rm = TRUE)
   r <- sapply(a, function(b) c(range(b$x), range(b$y)))
   
   if (is.null(xlim)) xlim <- c(min(r[1,]), max(r[2,]))
@@ -524,3 +524,23 @@ df2List <- function(df, groupBy, toGroup) {
   names(l) <- grps
   l
 }
+
+
+makeRepeatTable <- function(s, minRepeatSize = 200) {
+  outFile <- tempfile()
+  system(sprintf("nucmer --maxmatch --nosimplify -l %d --prefix=%s %s %s",
+                 minRepeatSize, outFile, s, s), intern = TRUE)
+  system(sprintf("show-coords -r -T %s.delta > %s.coord",
+                 outFile, outFile), intern = TRUE)
+  tbl <- read.table(sprintf("%s.coord", outFile), skip = 3, header = TRUE,
+                    fill = TRUE)[,1:9]
+  colnames(tbl) <- c("start.1", "end.1",
+                     "start.2", "end.2",
+                     "length.1", "length.2",
+                     "identity", "target", "query")
+  retval <- tbl[tbl$start.1 != tbl$start.2, ]
+  file.remove(paste(outFile, c(".delta", ".coord"), sep = ""))
+  return(retval)
+}
+
+
